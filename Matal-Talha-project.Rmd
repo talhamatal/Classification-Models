@@ -1,0 +1,668 @@
+---
+title: "Project Classification Models for 2018 BRFSS Survey Data"
+knit: (function(input_file, encoding) {
+    out_dir <- 'docs';
+    rmarkdown::render(input_file,
+      encoding=encoding,
+      output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+author: "Talha Matal"
+date: "12/13/2021"
+fontsize: 10pt
+output:
+  html_document:     
+    fig_width: 8
+    highlight: tango
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    df_print: tibble
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=8, fig.height=4,
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+```{r ,echo=FALSE,message=FALSE}
+library(RWeka)
+library(foreign)
+library(caret)
+library(FSelector)
+library(e1071)
+library(ModelMetrics)
+
+```
+## Dataset Details
+
+This dataset includes data from 11933 people who were surveyed and asked numerous questions about them which includes age, sex, weight, height, health data total of 108 questions for them to answer from. The result or answer of each is either in a numeric or categorical variable. 
+
+## Project Objectives
+
+The objective of this project is to build and test classifier models using different attribute selection methods and different classification algorithms. For the purpose of classification the class label for this dataset is the attribute "havarth3" which has two values either 1 or 2. This attribute represents if the person has some form of arthritis, rheumatoid arthritis, gout, lupus, or fibromyalgia. A value of 1 indicates that the person has it and 2 means that the person does not have any of these conditions. The main objective was to develop classifier models to classify unknown objects to the appropriate class based on the answer to the other questions (attribute values). 
+
+
+## Data Preparation / Preprocessing
+To begin with the process of building the classifier models and the data set must be pre processed to remove any inconsistent, incomplete data like if there are any values with N/A they must be removed to have better and accurate results. For this analysis I am first analyzing if the class labels contains any N/A values and if there are any N/A in the other attributes i am replacing them with appropriate values. The nominal attributes N/A values  are replaced with the mode (highest frequency) for each attribute and the numeric attributes N/A  values are replaced with the mean of the rest of the values of the attribute. Another pre-processing that I have done is to  normalize the numeric data so they are all in the same norm. Before performing the pre processing I am loading the data set from the file "project-2018-BRFSS-arthritis.arff" into an R data frame. The R code is shown below.
+
+```{r ,echo=TRUE,size='small'}
+data <- read.arff("project-2018-BRFSS-arthritis.arff")
+```
+
+The first step in pre processing is to check if there are any N/A values within the class attribute "havarth3". As the output below shows integer(0) so there are no missing values within the class attribute.
+
+```{r ,echo=TRUE,size='small'}
+which(is.na(data$havarth3))
+```
+
+The next step is to check if there are any missing (N/A) values in other attributes and fill in them as described above. Nominal attributes with the mode( highest frequency) value and numerical attributes with the mean (average) value.
+
+```{r,echo=TRUE,size='small'}
+for(i in 1:(ncol(data)-1)){
+  if(class(data[,i])=="factor"){
+    data[,i][is.na(data[,i])] <- names(sort(table(data[,i]),decreasing = TRUE)[1])
+  }
+  if(class(data[,i]) == "numeric"){
+    data[,i][is.na(data[,i])] <- mean(data[,i],na.rm = TRUE)
+    
+  }
+}
+```
+
+The final step in data pre processing is to normalize the numeric attributes so all the numeric attributes follow the same norm.
+
+```{r,echo=TRUE,size='small'}
+data <- Normalize(havarth3~.,data)
+```
+
+## Data Splitting
+In order to build a classifier model we need to split the data set into train and test data set so we can train the model using the training data and then test the classifier on the test data set. This method that I am applying is the holdout method. For the holdout method I am splitting the dataset so 66% of the data is in the training and 34% is is the test data set respectively and the split is stratified splitting so the class distribution is preserved.
+
+```{r,echo=TRUE,size='small'}
+set.seed(1481)
+data_part <- createDataPartition(y = data$havarth3,p=0.66,list=F)
+
+train <- data[data_part,]
+nrow(train)
+
+test <-data[-data_part,]
+nrow(test)
+
+```
+
+The train and test data set are saved as Attribute relation File Format(ARFF) file as shown below.
+
+```{r,echo=TRUE,size='small'}
+write.arff(test,"project-test.arff")
+write.arff(train,"project-train.arff")
+```
+
+## Attribute Selection Methods
+Before we build the models using the training data set we need to select only attributes which are important and relevant in determining the classifier models and remove any redundant attributes so we can achieve the algorithms which are faster and not overfitted. There are a number of attribute selection methods I will be using the below 4 methods.
+
+1. Chi-Squared Feature Ranking
+2. Information Gain Based Feature Ranking(Entropy based)
+3. Gain Ratio Based Feature Ranking(Entropy based)
+4. Correlation Based Feature Subset Selection
+  
+## Classification Algorithm
+After doing the attribute selection we need to build the model using the reduced training dataset that we got after attribute selection. Below are some of the classification algorithms that I am applying on the data set to build the models.
+
+1. 1R
+The 1R algorithm generates the rules that based on only a single attribute. The algorithm generates rules based on each attribute and selects the attribute that gives the lowest classification error.
+  
+2. Naive Bayes
+The naïve Bayes classifier performs probabilistic prediction based on the probability values of class membership.
+     
+3. Decision Tree
+The decision tree algorithm builds a model that looks like a tree. The learning process in a decision tree is called decision tree induction. The tree has internal nodes which represent the test on an attribute and the leaf node represent a classification.
+     
+4. K Nearest Neighbor (KNN)
+KNN performs classification based on the records which are very much similar to the unknown record. The similarity is determined by the distance metric (Manhattan or Euclidean) and the class is determined  by simple majority voting. The value of K (number of neighbors) is passed to the algorithm.
+     
+5. Logistic Regression
+Logistic Regression uses the logistic response function to find the class of a unknown dataset. The classifier algorithm estimates the coefficients using the training dataset. Once the coefficients are estimated then using the value of the predictor variable it calculate the probability p of the class attribute belonging to one class. If the probability is above a certain threshold then it classifies the unknown data set tuple to be that class otherwise it goes to the second class.
+     
+6. Neural Network
+The neural network classification algorithm simulates the activities that occur in a human brain. It comprises input/output nodes which are part of the input and output layers. Along with one input and output layer there are one or more hidden layer. The connection that connects the output of one layer to the input of the next layer has a weight associated with that. The output from the input layer is fed to the input of the next layer which calculates the weighted sum and then a bias is added to the output before being fed to the output layer where an activation function (logistic or sigmoid) is applied to find the output (predicted value). Neural network is a learning process which follows backpropagation where the error is fed back to adjust the weight and the bias with the goal of minimizing the error. 
+
+## Chi-Squared Feature Ranking
+The first attribute selection method that I selected is the Chi-Squared Feature Ranking. The Chi-squared algorithm evaluates the the importance of each individual attribute in the context of the class label "havarth3". This algorithm does several things. First, it discretizes the continuous attribute being evaluated. Then determines the weight of dependence of the class on the attribute. It then confirms the discretized data accurately represents the original value. This provides the weighted ranking for each of the attributes. Then I selected the top 5 attributes with the weights from the ranking.
+
+```{r,echo=TRUE,size='small'}
+#Chi Squared Feature Ranking
+chi_weights <- chi.squared(havarth3~.,train)
+chi_subset <- cutoff.k(chi_weights,5)
+chi_subset
+```
+
+This method selected the below attributes.
+
+1. x.age80 (Imputed Age Value collapsed above 80)
+2. x.ageg5yr (Reported age in 5 year categories)
+3. x.age.g (Imputed Age in 6 groups)
+4. employ1 (Employment Status)
+5. diffwalk (Difficulty Walking or Climbing Stairs)
+
+Based on the attributes ranking I reduced the training and test dataset to these attributes only along with the class attribute "havarth3".
+
+```{r,echo=TRUE,size='small'}
+train_reduced_chi <- train[,c(chi_subset,"havarth3")]
+test_reduced_chi <- test[,c(chi_subset,"havarth3")]
+```
+
+After obtaining the reduced dataset I apply the above mentioned classification algorithms. 
+
+### 1R 
+I apply the 1R classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_1R_chi <- OneR(havarth3~.,data = train_reduced_chi)
+```
+
+Then I evaluate the performance of the 1R classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_1R_chi,newdata=test_reduced_chi,class=TRUE)
+```
+
+### Naive Bayes
+I apply the Naive Bayes classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+NB <- make_Weka_classifier("weka/classifiers/bayes/NaiveBayes")
+model_NB_chi <-NB(havarth3~.,data=train_reduced_chi)
+```
+
+Then I evaluate the performance of the Naive Bayes classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_NB_chi,newdata=test_reduced_chi,class=TRUE)
+```
+
+### Decision Tree(J48)
+I apply the Decision Tree(J48) classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_tree_chi <- J48(havarth3~.,data=train_reduced_chi)
+```
+
+Then I evaluate the performance of the Decision Tree(J48) classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_tree_chi,newdata=test_reduced_chi,class=TRUE)
+```
+
+### K Nearest Neighbor (KNN)
+Before finalizing the KNN classification algorithm I determined what is the optimal value of K (between 3- 12) that will give us the best accuracy (highest number of correct values) and then I apply the KNN model on that.
+
+```{r,echo=TRUE,size='small'}
+optknn = function(k = 2) {
+  set.seed(1481)
+  model_knn_chi <- IBk(havarth3~., data=train_reduced_chi,control = Weka_control(K=k))
+  performance <- evaluate_Weka_classifier(model_knn_chi,newdata=test_reduced_chi,class=TRUE)
+  performance$details["pctCorrect"]
+}
+
+k = seq(from = 3, to =12, by = 1)
+optk = sapply(X = k, FUN = optknn)
+names(optk) = k
+optk
+
+opt_k <- names (optk[ which.max(optk == max(optk)) ])
+```
+
+I apply the KNN(IBK) classification algorithm on the reduced training dataset to generate the model based on the value of K generated above.
+
+```{r,echo=TRUE,size='small'}
+model_knn_chi <- IBk(havarth3~., data=train_reduced_chi,control=Weka_control(K=opt_k))
+```
+
+Then I evaluate the performance of the KNN(IBK) classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_knn_chi,newdata=test_reduced_chi,class=TRUE)
+```
+
+### Logistic Regression
+I apply the Logistic Regression classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_Logistic_chi <- Logistic(havarth3~.,data = train_reduced_chi)
+```
+
+Then I evaluate the performance of the Logistic Regression classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_Logistic_chi,newdata=test_reduced_chi,class=TRUE)
+```
+
+### Neural Network (Multilayer Perceptron)
+I apply the Neural Network classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+NW <- make_Weka_classifier("weka/classifiers/functions/MultilayerPerceptron")
+model_NW_chi <- NW(havarth3~., data = train_reduced_chi)
+```
+
+Then I evaluate the performance of the Neural Network classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_NW_chi,newdata=test_reduced_chi,class=TRUE)
+```
+
+
+## Information Gain Based Feature Ranking(Entropy based)
+The next attribute selection method that I selected is the Information Gain based Feature ranking which uses entropy (info). The info is the how pure a dataset is with regards to the class labels. This attribute selection method calculates the info of each feature (attribute) and then calculates the information gain for that feature (attribute) by subtracting the info of the feature from the info of the entire dataset. Then it ranks each of the attributes with the highest importance based on the information gain calculated. For the classification I am selecting the top 5 attributes from the list.
+
+```{r,echo=TRUE,size='small'}
+#Information Gain Feature Ranking
+info_weights <- information.gain(havarth3~.,data=train,unit = "log2")
+info_subset <- cutoff.k(info_weights,5)
+info_subset
+```
+
+This method selected the below attributes.
+
+1. x.age80 (Imputed Age Value collapsed above 80)
+2. x.ageg5yr (Reported age in 5 year categories)
+3. x.age.g (Imputed Age in 6 groups)
+4. employ1 (Employment Status)
+5. diffwalk (Difficulty Walking or Climbing Stairs)
+
+Based on the attributes ranking I reduced the training and test dataset to these attributes only along with the class attribute "havarth3".
+
+```{r,echo=TRUE,size='small'}
+train_reduced_info <- train[,c(info_subset,"havarth3")]
+test_reduced_info <- test[,c(info_subset,"havarth3")]
+```
+
+After obtaining the reduced dataset I apply the above mentioned classification algorithms. 
+
+### 1R 
+I apply the 1R classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_1R_info <- OneR(havarth3~.,data = train_reduced_info)
+```
+
+Then I evaluate the performance of the 1R classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_1R_info,newdata=test_reduced_info,class=TRUE)
+```
+
+### Naive Bayes
+I apply the Naive Bayes classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+NB <- make_Weka_classifier("weka/classifiers/bayes/NaiveBayes")
+model_NB_info <-NB(havarth3~.,data=train_reduced_info)
+```
+
+Then I evaluate the performance of the Naive Bayes classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_NB_info,newdata=test_reduced_info,class=TRUE)
+```
+
+### Decision Tree(J48)
+I apply the Decision Tree(J48) classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_tree_info <- J48(havarth3~.,data=train_reduced_info)
+```
+
+Then I evaluate the performance of the Decision Tree(J48) classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_tree_info,newdata=test_reduced_info,class=TRUE)
+```
+
+### K Nearest Neighbor (KNN)
+Before finalizing the KNN classification algorithm I determined what is the optimal value of K (between 3- 12) that will give us the best accuracy (highest number of correct values) and then I apply the KNN model on that.
+
+```{r,echo=TRUE,size='small'}
+optknn = function(k = 2) {
+  set.seed(1481)
+  model_knn_info <- IBk(havarth3~., data=train_reduced_info,control = Weka_control(K=k))
+  performance <- evaluate_Weka_classifier(model_knn_info,newdata=test_reduced_info,class=TRUE)
+  performance$details["pctCorrect"]
+}
+
+k = seq(from = 3, to =12, by = 1)
+optk = sapply(X = k, FUN = optknn)
+names(optk) = k
+optk
+
+opt_k <- names (optk[ which.max(optk == max(optk)) ])
+```
+
+I apply the KNN(IBK) classification algorithm on the reduced training dataset to generate the model based on the value of K generated above.
+
+```{r,echo=TRUE,size='small'}
+model_knn_info <- IBk(havarth3~., data=train_reduced_info,control=Weka_control(K=opt_k))
+```
+
+Then I evaluate the performance of the KNN(IBK) classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_knn_info,newdata=test_reduced_info,class=TRUE)
+```
+
+### Logistic Regression
+I apply the Logistic Regression classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_Logistic_info <- Logistic(havarth3~.,data = train_reduced_info)
+```
+
+Then I evaluate the performance of the Logistic Regression classifier. The results are shown below. 
+
+```{r,echo=TRUE}
+evaluate_Weka_classifier(model_Logistic_info,newdata=test_reduced_info,class=TRUE)
+```
+
+### Neural Network (Multilayer Perceptron)
+I apply the Neural Network classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+NW <- make_Weka_classifier("weka/classifiers/functions/MultilayerPerceptron")
+model_NW_info <- NW(havarth3~., data = train_reduced_info)
+```
+
+Then I evaluate the performance of the Neural Network classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_NW_info,newdata=test_reduced_info,class=TRUE)
+```
+
+
+## Gain Ratio based Feature Ranking(Entropy based)
+The next attribute selection method that I selected is the Gain Ratio based Feature ranking which similarly to the information gain method uses the entropy(info) of the attribute. This attribute selection method calculates the gain ratio of each feature (attribute) by dividing the information gain by the info of each feature (attribute). Then it ranks each of the attributes with the highest importance based on the gain ratio calculated. For the classification I am selecting the top 5 attributes from the list.
+
+```{r,echo=TRUE,size='small'}
+##Gain Ratio Feature Ranking
+gainratio_weights <- gain.ratio(havarth3~.,train,unit = "log2")
+gainratio_subset <- cutoff.k(gainratio_weights,5)
+gainratio_subset
+```
+
+This method selected the below attributes.
+
+1. diffwalk (Difficulty Walking or Climbing Stairs)
+2. diffdres (Difficulty Dressing or Bathing)
+3. employ1 (Employment Status)
+4. chccopd1 ((Ever told) you have chronic obstructive pulmonary disease, emphysema or chronic bronchitis?)
+5. x.rfhlth (Adults with good or better health)
+
+Based on the attributes ranking I reduced the training and test dataset to these attributes only along with the class attribute "havarth3".
+
+```{r,echo=TRUE,size='small'}
+train_reduced_gain <- train[,c(gainratio_subset,"havarth3")]
+test_reduced_gain <- test[,c(gainratio_subset,"havarth3")]
+```
+
+After obtaining the reduced dataset I apply the above mentioned classification algorithms. 
+
+### 1R 
+I apply the 1R classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_1R_gain <- OneR(havarth3~.,data = train_reduced_gain)
+```
+
+Then I evaluate the performance of the 1R classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_1R_gain,newdata=test_reduced_gain,class=TRUE)
+```
+
+### Naive Bayes
+I apply the Naive Bayes classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+NB <- make_Weka_classifier("weka/classifiers/bayes/NaiveBayes")
+model_NB_gain <-NB(havarth3~.,data=train_reduced_gain)
+```
+
+Then I evaluate the performance of the Naive Bayes classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_NB_gain,newdata=test_reduced_gain,class=TRUE)
+```
+
+### Decision Tree(J48)
+I apply the Decision Tree(J48) classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_tree_gain <- J48(havarth3~.,data=train_reduced_gain)
+```
+
+Then I evaluate the performance of the Decision Tree(J48) classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_tree_gain,newdata=test_reduced_gain,class=TRUE)
+```
+
+### K Nearest Neighbor (KNN)
+Before finalizing the KNN classification algorithm I determined what is the optimal value of K (between 3- 12) that will give us the best accuracy (highest number of correct values) and then I apply the KNN model on that.
+
+```{r,echo=TRUE,size='small'}
+optknn = function(k = 2) {
+  set.seed(1481)
+  model_knn_gain <- IBk(havarth3~., data=train_reduced_gain,control = Weka_control(K=k))
+  performance <- evaluate_Weka_classifier(model_knn_gain,newdata=test_reduced_gain,class=TRUE)
+  performance$details["pctCorrect"]
+}
+
+k = seq(from = 3, to =12, by = 1)
+optk = sapply(X = k, FUN = optknn)
+names(optk) = k
+optk
+
+opt_k <- names (optk[ which.max(optk == max(optk)) ])
+```
+
+I apply the KNN(IBK) classification algorithm on the reduced training dataset to generate the model based on the value of K generated above.
+
+```{r,echo=TRUE,size='small'}
+model_knn_gain <- IBk(havarth3~., data=train_reduced_gain,control=Weka_control(K=opt_k))
+```
+
+Then I evaluate the performance of the KNN(IBK) classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_knn_gain,newdata=test_reduced_gain,class=TRUE)
+```
+
+### Logistic Regression
+I apply the Logistic Regression classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_Logistic_gain <- Logistic(havarth3~.,data = train_reduced_gain)
+```
+
+Then I evaluate the performance of the Logistic Regression classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_Logistic_gain,newdata=test_reduced_gain,class=TRUE)
+```
+
+### Neural Network (Multilayer Perceptron)
+I apply the Neural Network classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+NW <- make_Weka_classifier("weka/classifiers/functions/MultilayerPerceptron")
+model_NW_gain <- NW(havarth3~., data = train_reduced_gain)
+```
+
+Then I evaluate the performance of the Neural Network classifier. The results are shown below. 
+
+```{r,echo=TRUE, size='small'}
+evaluate_Weka_classifier(model_NW_gain,newdata=test_reduced_gain,class=TRUE)
+```
+
+
+## Correlation Based Feature Subset Selection (CFS)
+The next attribute selection method that I selected is the Correlation Based Feature Subset. This attribute selection method finds an attribute subset using the correlation measures for the data. It uses the best first search method for searching the attribute subset space.
+
+```{r,echo=TRUE,size='small'}
+##Correlation Based Feature Subset Selection (CFS)
+cfs_subset <- cfs(havarth3~.,train)
+cfs_subset
+```
+
+This method selected the below attributes.
+
+1. employ1 (Employment Status)
+2. pneuvac4 (Pneumonia shot ever)
+3. diffwalk (Difficulty Walking or Climbing Stairs)
+4. physhlth (Number of Days Physical Health Not Good)
+5. chccopd1 ((Ever told) you have chronic obstructive pulmonary disease, emphysema or chronic bronchitis?)
+6. x.age80 (Imputed Age Value collapsed above 80)
+7. x.rfhlth (Adults with good or better health)
+
+Based on the attributes ranking I reduced the training and test dataset to these attributes only along with the class attribute "havarth3".
+
+```{r,echo=TRUE,size='small'}
+train_reduced_cfs <- train[,c(cfs_subset,"havarth3")]
+test_reduced_cfs <- test[,c(cfs_subset,"havarth3")]
+```
+
+After obtaining the reduced dataset I apply the above mentioned classification algorithms. 
+
+### 1R 
+I apply the 1R classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_1R_cfs <- OneR(havarth3~.,data = train_reduced_cfs)
+```
+
+Then I evaluate the performance of the 1R classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_1R_cfs,newdata=test_reduced_cfs,class=TRUE)
+```
+
+### Naive Bayes
+I apply the Naive Bayes classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+NB <- make_Weka_classifier("weka/classifiers/bayes/NaiveBayes")
+model_NB_cfs <-NB(havarth3~.,data=train_reduced_cfs)
+```
+
+Then I evaluate the performance of the Naive Bayes classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_NB_cfs,newdata=test_reduced_cfs,class=TRUE)
+```
+
+### Decision Tree(J48)
+I apply the Decision Tree(J48) classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_tree_cfs <- J48(havarth3~.,data=train_reduced_cfs)
+```
+
+Then I evaluate the performance of the Decision Tree(J48) classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_tree_cfs,newdata=test_reduced_cfs,class=TRUE)
+```
+
+### K Nearest Neighbor (KNN)
+Before finalizing the KNN classification algorithm I determined what is the optimal value of K (between 3- 12) that will give us the best accuracy (highest number of correct values) and then I apply the KNN model on that.
+
+```{r,echo=TRUE,size='small'}
+optknn = function(k = 2) {
+  set.seed(1481)
+  model_knn_cfs <- IBk(havarth3~., data=train_reduced_cfs,control = Weka_control(K=k))
+  performance <- evaluate_Weka_classifier(model_knn_cfs,newdata=test_reduced_cfs,class=TRUE)
+  performance$details["pctCorrect"]
+}
+
+k = seq(from = 3, to =12, by = 1)
+optk = sapply(X = k, FUN = optknn)
+names(optk) = k
+optk
+
+opt_k <- names (optk[ which.max(optk == max(optk)) ])
+```
+
+I apply the KNN(IBK) classification algorithm on the reduced training dataset to generate the model based on the value of K generated above.
+
+```{r,echo=TRUE,size='small'}
+model_knn_cfs <- IBk(havarth3~., data=train_reduced_cfs,control=Weka_control(K=opt_k))
+```
+
+Then I evaluate the performance of the KNN(IBK) classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_knn_cfs,newdata=test_reduced_cfs,class=TRUE)
+```
+
+### Logistic Regression
+I apply the Logistic Regression classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+model_Logistic_cfs <- Logistic(havarth3~.,data = train_reduced_cfs)
+```
+
+Then I evaluate the performance of the Logistic Regression classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_Logistic_cfs,newdata=test_reduced_cfs,class=TRUE)
+```
+
+### Neural Network (Multilayer Perceptron)
+I apply the Neural Network classification algorithm on the reduced training dataset to generate the model.
+
+```{r,echo=TRUE,size='small'}
+NW <- make_Weka_classifier("weka/classifiers/functions/MultilayerPerceptron")
+model_NW_cfs <- NW(havarth3~., data = train_reduced_cfs)
+```
+
+Then I evaluate the performance of the Neural Network classifier. The results are shown below. 
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_NW_cfs,newdata=test_reduced_cfs,class=TRUE)
+```
+
+
+## Best Classifier (Discussion)
+After running the 24 classification algorithms as shown above I can conclude that although most of the classifier have an accuracy between 70% and 75% but the best classifier is the one with that is based on Correlation Based Feature subset selection (CFS) attribute selection and Naive Bayes algorithm. This classifier gives us the accuracy (percent of correct classification) of 74.49% which although is lesser than the some of the other classifiers that I have build above. I have decided to the select this one specifically is because it gives the better TP Rate (0.641) for the class 1 (people who have been told they have arthritis) and the TP Rate for the class 2 (people who have never been told they have arthritis) is also good. The FP rate for both the classes is also low (Class 1: 0.202 and Class 2: 0.359) so it gives a classifier with is not only accurate enough but also it gives higher and better TP Rate and lower FP Rate. The rationale behind this is that we want to accurately classify people who have arthritis so this classifier helps us in achieving with more accuracy. 
+
+This classifier is selecting the below attributes and the class attribute of "havarth3". 
+
+1. employ1 (Employment Status)
+2. pneuvac4 (Pneumonia shot ever)
+3. diffwalk (Difficulty Walking or Climbing Stairs)
+4. physhlth (Number of Days Physical Health Not Good)
+5. chccopd1 ((Ever told) you have chronic obstructive pulmonary disease, emphysema or chronic bronchitis?)
+
+These 5 attributes are the best and most relevant to the class label as they along with the Naive Bayes algorithm are giving the best and highest TP rate along with a higher accuracy.
+
+The reduced training and the test data set for my best model are saved in the file "best-train.arff" and "best-test.arff" respectively. 
+
+```{r,echo=TRUE,size='small'}
+write.arff(test_reduced_cfs,"best-test.arff")
+write.arff(train_reduced_cfs,"best-train.arff")
+```
+
+The model output is shown below.
+
+```{r,echo=TRUE,size='small'}
+NB <- make_Weka_classifier("weka/classifiers/bayes/NaiveBayes")
+model_NB_cfs <-NB(havarth3~.,data=train_reduced_cfs)
+```
+
+The performance measures along with the confusion matrix for the model is shown below.
+
+```{r,echo=TRUE,size='small'}
+evaluate_Weka_classifier(model_tree_cfs,newdata=test_reduced_cfs,class=TRUE)
+```
+
+Looking at the performance measures we also see that ROC area of the model is 0.787 which is higher than the rest of the models making it the best classification model. 
+
+## Lessons Learned
+One thing that I learned from this project is that regardless of the overall accuracy of the classifier we need to take a closer look at the overall performance measures including TP Rate, FP Rate, precision, recall ROC Area in order to decide if out model is good enough. As for the algorithm that I selected the overall accuracy was lower but I needed to look at other performance attributes like TP Rate, FP Rate to come up with the classifier with best performance. 
